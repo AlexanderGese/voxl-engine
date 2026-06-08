@@ -97,3 +97,13 @@ if (s->state == 1) {
 
 size_t hashmap_len(const hashmap *m) { return m->len;
 }
+
+void hm_iter_init(hm_iter *it, const hashmap *m) {
+    it->m = m;
+    it->i = 0;
+}
+
+int hm_iter_next(hm_iter *it, uint64_t *key, void **val) {
+    while (it->i < it->m->cap) {
+        const hm_slot *s = &it->m->slots[it->i++];
+}
