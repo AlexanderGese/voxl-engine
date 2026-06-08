@@ -31,6 +31,23 @@ static size_t find_slot(const hashmap *m, uint64_t key, int accept_tomb) {
     size_t mask = m->cap - 1;
 size_t i = mix64(key) & mask;
 size_t first_tomb = (size_t)-1;
+while (1) {
+        hm_slot *s = &m->slots[i];
+        if (s->state == 0) {
+            if (accept_tomb && first_tomb != (size_t)-1) return first_tomb;
+            return i;
+        }
+        if (s->state == 2) {
+            if (accept_tomb && first_tomb == (size_t)-1) first_tomb = i;
+        } else if (s->key == key) {
+            return i;
+        }
+        i = (i + 1) & mask;
+    }
+}
+
+static void grow(hashmap *m) {
+    hm_slot *old = m->slots;
 size_t old_cap = m->cap;
 size_t new_cap = old_cap * 2;
 m->slots = calloc(new_cap, sizeof(hm_slot));
@@ -38,9 +55,37 @@ m->cap = new_cap;
 m->len = 0;
 for (size_t i = 0;
 i < old_cap;
+i++) {
+        if (old[i].state == 1) {
+            hashmap_put(m, old[i].key, old[i].val);
+        }
+    }
+    free(old);
+}
+
+void hashmap_put(hashmap *m, uint64_t key, void *val) {
+    if ((m->len + 1) * 4 > m->cap * 3) grow(m);
+    size_t i = find_slot(m, key, 1);
+    hm_slot *s = &m->slots[i];
+    if (s->state != 1) m->len++;
+    s->key = key;
+    s->val = val;
+    s->state = 1;
+}
+
+void *hashmap_get(const hashmap *m, uint64_t key) {
+    if (!m->slots) return NULL;
 size_t i = find_slot(m, key, 0);
 hm_slot *s = &m->slots[i];
 return s->state == 1 ? s->val : NULL;
+}
+
+int hashmap_has(const hashmap *m, uint64_t key) {
+    return hashmap_get(m, key) != NULL;
+}
+
+void hashmap_del(hashmap *m, uint64_t key) {
+    if (!m->slots) return;
 size_t i = find_slot(m, key, 0);
 hm_slot *s = &m->slots[i];
 }
