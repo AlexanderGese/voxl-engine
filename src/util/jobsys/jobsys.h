@@ -14,6 +14,7 @@ typedef struct {
     jat_u64 overflowed;    // jobs that spilled to the shared queue
     jat_u64 main_ran;      // main-only jobs drained on the main thread
 } jobsys_stats;
+typedef struct jobsys_pool jobsys_pool;
 typedef struct {
     jobsys_pool   *pool;
     jobsys_deque   deque;
