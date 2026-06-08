@@ -88,4 +88,12 @@ void hashmap_del(hashmap *m, uint64_t key) {
     if (!m->slots) return;
 size_t i = find_slot(m, key, 0);
 hm_slot *s = &m->slots[i];
+if (s->state == 1) {
+        s->state = 2;
+        s->val = NULL;
+        m->len--;
+    }
+}
+
+size_t hashmap_len(const hashmap *m) { return m->len;
 }
