@@ -2,8 +2,14 @@
 #include "bvh_box.h"
 #include "../darray.h"
 #include "../log.h"
+
 #include <stddef.h>
+
+// the flat node array doesnt store depth, so we recover it with a small stack
+// walk that pairs each node index with the depth it sits at. cheap, only run on
+// debug paths.
 typedef struct { int32_t idx; int depth; } walk_item;
+
 void bvh_collect_stats(const bvh *b, bvh_stats *out) {
     bvh_stats s = {0};
     if (!b->built || b->root < 0) { *out = s; return; }
@@ -49,15 +55,13 @@ void bvh_collect_stats(const bvh *b, bvh_stats *out) {
 }
 
 void bvh_dump(const bvh *b) {
-    if (!b->built || b->root < 0) { LOGD("bvh: <empty>");
-return;
-}
+    if (!b->built || b->root < 0) { LOGD("bvh: <empty>"); return; }
     const bvh_storage *st = &b->store;
-walk_item stack[BVH_MAX_DEPTH * 2 + 4];
-int sp = 0;
-stack[sp++] = (walk_item){ b->root, 0 }
-;
-while (sp > 0) {
+
+    walk_item stack[BVH_MAX_DEPTH * 2 + 4];
+    int sp = 0;
+    stack[sp++] = (walk_item){ b->root, 0 };
+    while (sp > 0) {
         walk_item w = stack[--sp];
         const bvh_node *n = bvh_node_at_c(st, w.idx);
 
@@ -84,9 +88,37 @@ while (sp > 0) {
 // push the two endpoints of one edge into the darray.
 static void emit_edge(vec3 **lines, vec3 a, vec3 b) {
     darr_push(*lines, a);
-darr_push(*lines, b);
-const bvh_storage *st = &b->store;
-int emitted = 0;
-for (int32_t i = 0;
-i < st - 1->node_count;
+    darr_push(*lines, b);
+}
+
+// emit the 12 edges of one box. corner naming: bit 0=x,1=y,2=z like everywhere
+// else in this engine.
+static void emit_box(vec3 **lines, aabb box) {
+    vec3 c[8];
+    for (int i = 0; i < 8; i++) {
+        c[i].x = (i & 1) ? box.max.x : box.min.x;
+        c[i].y = (i & 2) ? box.max.y : box.min.y;
+        c[i].z = (i & 4) ? box.max.z : box.min.z;
+    }
+    // 4 edges along x, 4 along y, 4 along z. pairs differ by exactly one bit.
+    static const int ex[][2] = { {0,1},{2,3},{4,5},{6,7} };
+    static const int ey[][2] = { {0,2},{1,3},{4,6},{5,7} };
+    static const int ez[][2] = { {0,4},{1,5},{2,6},{3,7} };
+    for (int i = 0; i < 4; i++) emit_edge(lines, c[ex[i][0]], c[ex[i][1]]);
+    for (int i = 0; i < 4; i++) emit_edge(lines, c[ey[i][0]], c[ey[i][1]]);
+    for (int i = 0; i < 4; i++) emit_edge(lines, c[ez[i][0]], c[ez[i][1]]);
+}
+
+int bvh_collect_lines(const bvh *b, vec3 **lines, int leaves_only) {
+    if (!b->built || b->root < 0) return 0;
+    const bvh_storage *st = &b->store;
+    int emitted = 0;
+
+    for (int32_t i = 0; i < st->node_count; i++) {
+        const bvh_node *n = bvh_node_at_c(st, i);
+        if (leaves_only && n->count == 0) continue;
+        emit_box(lines, n->bounds);
+        emitted++;
+    }
+    return emitted;
 }
