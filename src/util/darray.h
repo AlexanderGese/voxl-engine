@@ -1,18 +1,26 @@
 #ifndef UTIL_DARRAY_H
 #define UTIL_DARRAY_H
+
+// tiny dynamic array. header lives in front of the data pointer.
+// i wrote this like 3 times before settling on this version. the macro
+// trick is stolen from nothings/stb.
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
 typedef struct {
     size_t len;
     size_t cap;
 } darray_hdr;
+
 #define darr_hdr(a)     ((darray_hdr*)((char*)(a) - sizeof(darray_hdr)))
 #define darr_len(a)     ((a) ? darr_hdr(a)->len : 0)
 #define darr_cap(a)     ((a) ? darr_hdr(a)->cap : 0)
 #define darr_empty(a)   (darr_len(a) == 0)
+
 #define darr_push(a, v) \
-(darr__maybe_grow((void**)&(a), sizeof *(a), 1), \
+    (darr__maybe_grow((void**)&(a), sizeof *(a), 1), \
      (a)[darr_hdr(a)->len++] = (v))
 
 #define darr_reserve(a, n) \
@@ -43,4 +51,5 @@ static inline void darr__maybe_grow(void **a, size_t elem, size_t n) {
     nh->cap = newcap;
     *a = (char*)nh + sizeof(darray_hdr);
 }
+
 #endif
