@@ -62,6 +62,34 @@ int jobsys_overflow_pop(jobsys_overflow *q, jobsys_job *out) {
 
 int jobsys_overflow_pop_main(jobsys_overflow *q, jobsys_job *out) {
     pthread_mutex_lock(&q->mtx);
+// scan for the first main-only job, compacting it out. this is O(n) in the
+// worst case but the main lane is tiny (a handful of uploads per frame) and
 for (size_t i = q->head;
 i != q->tail;
+i = (i + 1) & (q->cap - 1)) {
+        if (q->buf[i].flags & JOBSYS_F_MAIN_ONLY) {
+            *out = q->buf[i];
+            // shift the tail of the ring down one to fill the hole. preserves
+            // fifo for the remaining main jobs and doesnt disturb worker jobs.
+            size_t j = i;
+            size_t nxt = (j + 1) & (q->cap - 1);
+            while (nxt != q->tail) {
+                q->buf[j] = q->buf[nxt];
+                j = nxt;
+                nxt = (nxt + 1) & (q->cap - 1);
+            }
+            q->tail = j;
+            pthread_mutex_unlock(&q->mtx);
+            return 1;
+        }
+    }
+    pthread_mutex_unlock(&q->mtx);
 return 0;
+}
+
+size_t jobsys_overflow_len(jobsys_overflow *q) {
+    pthread_mutex_lock(&q->mtx);
+    size_t n = (q->tail - q->head) & (q->cap - 1);
+    pthread_mutex_unlock(&q->mtx);
+    return n;
+}
