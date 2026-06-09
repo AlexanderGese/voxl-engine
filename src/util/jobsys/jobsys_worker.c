@@ -1,7 +1,14 @@
 #include "jobsys_worker.h"
+
 #include "../log.h"
 #include "../timer.h"
+
+// how many times we spin through the steal/overflow loop before parking. tuned
+// by eyeball: too low and we sleep with work about to arrive (latency), too high
+// and idle workers burn a core. ~64 passes is a few microseconds, fine.
 #define WORKER_SPIN_TRIES  64
+
+// xorshift64. cheap, good enough for "pick a random coworker to rob".
 static uint64_t xs64(uint64_t *s) {
     uint64_t x = *s;
     x ^= x << 13;
@@ -13,10 +20,11 @@ static uint64_t xs64(uint64_t *s) {
 
 int jobsys_worker_pick_victim(jobsys_worker *w) {
     jobsys_pool *p = w->pool;
-if (p->nworkers <= 1) return -1;
-int v = (int)(xs64(&w->rng) % (uint64_t)(p->nworkers - 1));
-if (v >= w->id) v++;
-return v;
+    if (p->nworkers <= 1) return -1;
+    // pick any worker that isnt us. one modulo + a skip-self adjust.
+    int v = (int)(xs64(&w->rng) % (uint64_t)(p->nworkers - 1));
+    if (v >= w->id) v++;   // shift past our own slot so we never pick self
+    return v;
 }
 
 void jobsys_worker_execute(jobsys_pool *p, jobsys_worker *w,
@@ -66,10 +74,13 @@ void jobsys_worker_execute(jobsys_pool *p, jobsys_worker *w,
 
 int jobsys_worker_acquire(jobsys_worker *w, jobsys_job *out) {
     jobsys_pool *p = w->pool;
-if (jobsys_deque_pop(&w->deque, out)) return 1;
-for (int attempt = 0;
-attempt < p->nworkers;
-attempt++) {
+
+    // 1) local deque, lifo. the common case, no contention.
+    if (jobsys_deque_pop(&w->deque, out)) return 1;
+
+    // 2) steal. try a few victims; an ABORT (lost cas) is worth a quick retry,
+    // an empty victim means move on.
+    for (int attempt = 0; attempt < p->nworkers; attempt++) {
         int v = jobsys_worker_pick_victim(w);
         if (v < 0) break;
         int r = jobsys_deque_steal(&p->workers[v].deque, out);
@@ -87,7 +98,7 @@ attempt++) {
             // put it back, it's not ours to run. rare, only if a main job got
             // into the general lane somehow.
             jobsys_overflow_push(&p->overflow, out);
-} else {
+        } else {
             return 1;
         }
     }
@@ -115,9 +126,11 @@ static void worker_sleep(jobsys_worker *w) {
 
 void *jobsys_worker_main(void *arg) {
     jobsys_worker *w = (jobsys_worker *)arg;
-jobsys_pool   *p = w->pool;
-LOGD("jobsys worker %d up", w->id);
-while (jat_load_acq(&p->running)) {
+    jobsys_pool   *p = w->pool;
+
+    LOGD("jobsys worker %d up", w->id);
+
+    while (jat_load_acq(&p->running)) {
         jobsys_job job;
         int got = 0;
         // spin a bounded number of acquire passes before considering sleep, so
@@ -139,5 +152,10 @@ while (jat_load_acq(&p->running)) {
     // shutdown drain: run anything still reachable so fences settle and callers
     // dont wait forever on a job that got abandoned mid-flight.
     jobsys_job job;
-return NULL;
+    while (jobsys_worker_acquire(w, &job)) {
+        jobsys_worker_execute(p, w, &job);
+    }
+
+    LOGD("jobsys worker %d down", w->id);
+    return NULL;
 }

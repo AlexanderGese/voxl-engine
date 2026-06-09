@@ -1,6 +1,8 @@
 #include "jobsys_overflow.h"
+
 #include <stdlib.h>
 #include <string.h>
+
 void jobsys_overflow_init(jobsys_overflow *q, size_t cap) {
     size_t c = 16;
     while (c < cap) c <<= 1;
@@ -13,9 +15,9 @@ void jobsys_overflow_init(jobsys_overflow *q, size_t cap) {
 
 void jobsys_overflow_free(jobsys_overflow *q) {
     free(q->buf);
-q->buf = NULL;
-q->cap = q->head = q->tail = 0;
-pthread_mutex_destroy(&q->mtx);
+    q->buf = NULL;
+    q->cap = q->head = q->tail = 0;
+    pthread_mutex_destroy(&q->mtx);
 }
 
 // caller holds the mutex. double the ring and unwrap it into the new buffer.
@@ -37,15 +39,15 @@ static void grow_locked(jobsys_overflow *q) {
 
 int jobsys_overflow_push(jobsys_overflow *q, const jobsys_job *job) {
     pthread_mutex_lock(&q->mtx);
-size_t next = (q->tail + 1) & (q->cap - 1);
-if (next == q->head) {
+    size_t next = (q->tail + 1) & (q->cap - 1);
+    if (next == q->head) {
         grow_locked(q);
         next = (q->tail + 1) & (q->cap - 1);
     }
     q->buf[q->tail] = *job;
-q->tail = next;
-pthread_mutex_unlock(&q->mtx);
-return 0;
+    q->tail = next;
+    pthread_mutex_unlock(&q->mtx);
+    return 0;
 }
 
 int jobsys_overflow_pop(jobsys_overflow *q, jobsys_job *out) {
@@ -62,11 +64,10 @@ int jobsys_overflow_pop(jobsys_overflow *q, jobsys_job *out) {
 
 int jobsys_overflow_pop_main(jobsys_overflow *q, jobsys_job *out) {
     pthread_mutex_lock(&q->mtx);
-// scan for the first main-only job, compacting it out. this is O(n) in the
-// worst case but the main lane is tiny (a handful of uploads per frame) and
-for (size_t i = q->head;
-i != q->tail;
-i = (i + 1) & (q->cap - 1)) {
+    // scan for the first main-only job, compacting it out. this is O(n) in the
+    // worst case but the main lane is tiny (a handful of uploads per frame) and
+    // it only runs on the main thread, so the cost is irrelevant.
+    for (size_t i = q->head; i != q->tail; i = (i + 1) & (q->cap - 1)) {
         if (q->buf[i].flags & JOBSYS_F_MAIN_ONLY) {
             *out = q->buf[i];
             // shift the tail of the ring down one to fill the hole. preserves
@@ -84,7 +85,7 @@ i = (i + 1) & (q->cap - 1)) {
         }
     }
     pthread_mutex_unlock(&q->mtx);
-return 0;
+    return 0;
 }
 
 size_t jobsys_overflow_len(jobsys_overflow *q) {
