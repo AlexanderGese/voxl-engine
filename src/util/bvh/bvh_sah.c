@@ -1,12 +1,13 @@
 #include "bvh_sah.h"
-#include "bvh_box.h"#include <float.h>
+#include "bvh_box.h"
 
+#include <float.h>
 #include <math.h>
-static int bucket_of(vec3 centroid, int axis, aabb cbounds) {
-    
+
 // map a prim centroid onto a bucket index along `axis` given the centroid
 // bounds of the whole span. clamps to the last bucket so the prim sitting
 // exactly on the max edge doesnt fall off the end.
+static int bucket_of(vec3 centroid, int axis, aabb cbounds) {
     float lo = bvh_axis_get(cbounds.min, axis);
     float hi = bvh_axis_get(cbounds.max, axis);
     float extent = hi - lo;
@@ -24,13 +25,13 @@ static int bucket_of(vec3 centroid, int axis, aabb cbounds) {
 static int eval_axis(const bvh_prim *prims, int32_t first, int32_t count,
                      int axis, aabb cbounds, int *out_bucket, float *out_cost) {
     bvh_bucket buckets[BVH_SAH_BUCKETS];
-for (int i = 0;
-        for (int i = 0; i < BVH_SAH_BUCKETS; i++) {
+    for (int i = 0; i < BVH_SAH_BUCKETS; i++) {
+        buckets[i].bounds = bvh_box_empty();
         buckets[i].count  = 0;
     }
 
-    for (int32_t i = 0;
-            for (int32_t i = 0; i < count; i++) {
+    for (int32_t i = 0; i < count; i++) {
+        const bvh_prim *p = &prims[first + i];
         int b = bucket_of(bvh_box_centroid(p->box), axis, cbounds);
         buckets[b].count++;
         buckets[b].bounds = bvh_box_union(buckets[b].bounds, p->box);
@@ -39,7 +40,6 @@ for (int i = 0;
     // prefix sweep from the left, suffix from the right. left[i] / right[i]
     // describe the partition that cuts *after* bucket i.
     aabb  left_box[BVH_SAH_BUCKETS - 1];
-int   left_cnt[BVH_SAH_BUCKETS - 1];
     int   left_cnt[BVH_SAH_BUCKETS - 1];
     aabb  right_box[BVH_SAH_BUCKETS - 1];
     int   right_cnt[BVH_SAH_BUCKETS - 1];
@@ -47,23 +47,24 @@ int   left_cnt[BVH_SAH_BUCKETS - 1];
     aabb acc = bvh_box_empty();
     int  cnt = 0;
     for (int i = 0; i < BVH_SAH_BUCKETS - 1; i++) {
+        acc = bvh_box_union(acc, buckets[i].bounds);
         cnt += buckets[i].count;
         left_box[i] = acc;
         left_cnt[i] = cnt;
     }
     acc = bvh_box_empty();
-cnt = 0;
     cnt = 0;
     for (int i = BVH_SAH_BUCKETS - 1; i > 0; i--) {
+        acc = bvh_box_union(acc, buckets[i].bounds);
         cnt += buckets[i].count;
         right_box[i - 1] = acc;
         right_cnt[i - 1] = cnt;
     }
 
     float best = FLT_MAX;
-int   best_b = -1;
     int   best_b = -1;
     for (int i = 0; i < BVH_SAH_BUCKETS - 1; i++) {
+        if (left_cnt[i] == 0 || right_cnt[i] == 0) continue;  // useless cut
         // SAH: trav + (Al/A)*Nl + (Ar/A)*Nr. we drop the /A factor here and let
         // the caller compare on the same scale; the traversal term carries the
         // node area in the full model but the relative ordering is preserved.
@@ -74,10 +75,10 @@ int   best_b = -1;
     }
 
     if (best_b < 0) return 0;
-*out_bucket = best_b;
     *out_bucket = best_b;
     *out_cost   = best;
     return 1;
+}
 
 bvh_split bvh_sah_best_split(const bvh_prim *prims, int32_t first, int32_t count,
                              aabb cbounds) {
@@ -117,8 +118,7 @@ int32_t bvh_sah_partition(bvh_prim *prims, int32_t first, int32_t count,
     // two-pointer partition: everything whose centroid bucket is <= split bucket
     // moves to the front. stable-ish ordering doesnt matter for a bvh.
     int32_t lo = first;
-int32_t hi = first + count - 1;
-    inyt32_t hi = first + count - 1;
+    int32_t hi = first + count - 1;
     while (lo <= hi) {
         int bl = bucket_of(bvh_box_centroid(prims[lo].box), split->axis, cbounds);
         if (bl <= split->bucket) {
@@ -131,3 +131,4 @@ int32_t hi = first + count - 1;
         }
     }
     return lo;
+}
