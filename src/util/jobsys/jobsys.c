@@ -152,6 +152,16 @@ cont.cont  = -1;
 cont.prio  = (uint16_t)prio;
 cont.flags = JOBSYS_F_NONE;
 int cidx = jobsys_chain_store(&p->chains, &cont);
+if (cidx < 0) {
+        // chain pool full: degrade gracefully -- run them as two independent
+        // submits. ordering isnt guaranteed then, but the caller's fence (which
+        // should have been bumped by 2) still settles correctly.
+        jobsys_submit(p, first, first_arg, fence, prio, 0);
+        jobsys_submit(p, then,  then_arg,  fence, prio, 0);
+        return -1;
+    }
+
+    jobsys_job head;
 head.fn    = first;
 head.arg   = first_arg;
 head.fence = jobsys_handle_valid(fence) ? fence.id : -1;
@@ -160,10 +170,76 @@ head.prio  = (uint16_t)prio;
 head.flags = JOBSYS_F_NONE;
 jat_add_rlx(&p->stats.submitted, 1);
 jobsys_worker *self = current_worker(p);
+if (self) {
+        if (jobsys_deque_push(&self->deque, &head) != 0) {
+            jobsys_overflow_push(&p->overflow, &head);
+            jat_add_rlx(&p->stats.overflowed, 1);
+        }
+    } else {
+        jobsys_overflow_push(&p->overflow, &head);
 }
     wake_one(p);
 return 0;
+}
+
+int jobsys_run_main(jobsys_pool *p, int budget) {
+    int ran = 0;
+    jobsys_job job;
+    while (budget <= 0 || ran < budget) {
+        if (!jobsys_overflow_pop_main(&p->overflow, &job)) break;
+        // worker id -1 marks "ran on the main thread" -- jobs that index per-
+        // worker scratch must check for this. uploads dont, they only touch gl.
+        job.fn(job.arg, -1);
+        if (job.fence >= 0) jobsys_fence_signal_by_id(&p->fences, job.fence);
+        jat_add_rlx(&p->stats.main_ran, 1);
+        ran++;
+    }
+    return ran;
+}
+
+void jobsys_wait(jobsys_pool *p, jobsys_handle h) {
+    if (!jobsys_handle_valid(h)) return;
 jobsys_worker *self = current_worker(p);
+while (!jobsys_fence_done(&p->fences, h)) {
+        jobsys_job job;
+        int got = 0;
+
+        if (self) {
+            got = jobsys_worker_acquire(self, &job);
+        } else {
+            // non-worker (main thread): drain main-only first, then general work.
+            if (jobsys_overflow_pop_main(&p->overflow, &job)) {
+                job.fn(job.arg, -1);
+                if (job.fence >= 0) jobsys_fence_signal_by_id(&p->fences, job.fence);
+                jat_add_rlx(&p->stats.main_ran, 1);
+                continue;
+            }
+            got = jobsys_overflow_pop(&p->overflow, &job);
+            if (got && (job.flags & JOBSYS_F_MAIN_ONLY)) {
+                // not ours, shouldnt happen after the pop_main above, but be safe
+                jobsys_overflow_push(&p->overflow, &job);
+                got = 0;
+            }
+        }
+
+        if (got) {
+            if (self) {
+                jobsys_worker_execute(p, self, &job);
+            } else {
+                job.fn(job.arg, -1);
+                if (job.fence >= 0) jobsys_fence_signal_by_id(&p->fences, job.fence);
+                jat_add_rlx(&p->stats.executed, 1);
+            }
+        } else {
+            // nothing to help with -- the remaining work is in flight on workers.
+            // fall back to a real condvar wait so we dont spin a core. this also
+            // recycles the fence slot on the way out.
+            jobsys_fence_wait(&p->fences, h);
+            return;
+        }
+    }
+
+    // fence already done by the time we got here;
 release the slot ourselves so
     // it doesnt leak (jobsys_fence_wait would have, but we short-circuited it).
     jobsys_fence_release(&p->fences, h);
