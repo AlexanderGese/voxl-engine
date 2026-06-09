@@ -4,6 +4,8 @@
 #include <string.h>
 #include "../log.h"
 #include "../assert.h"
+// how many cpus do we have. cores-1 by default so the main/render thread keeps a
+// core to itself. if sysconf is unhelpful we assume a modest 4.
 static int detect_workers(void) {
     long n = sysconf(_SC_NPROCESSORS_ONLN);
     if (n < 1) n = 4;
@@ -144,6 +146,8 @@ int jobsys_submit_chain(jobsys_pool *p, jobsys_fn first, void *first_arg,
                         jobsys_fn then, void *then_arg,
                         jobsys_handle fence, jobsys_prio prio) {
     VX_ASSERT(first && then);
+// build the continuation first and stash it; the predecessor will carry its
+// index. the continuation inherits the fence so the whole chain counts.
 jobsys_job cont;
 cont.fn    = then;
 cont.arg   = then_arg;
@@ -199,6 +203,10 @@ int jobsys_run_main(jobsys_pool *p, int budget) {
 
 void jobsys_wait(jobsys_pool *p, jobsys_handle h) {
     if (!jobsys_handle_valid(h)) return;
+// help-while-waiting. if the caller is the main thread (or any thread) we
+// dont just park -- we pull jobs and run them so the fence's own work makes
+// progress. crucial: if the main thread blocks naively on a fence whose jobs
+// are still queued and all workers are asleep, nobody wakes them and we hang.
 jobsys_worker *self = current_worker(p);
 while (!jobsys_fence_done(&p->fences, h)) {
         jobsys_job job;
@@ -243,3 +251,15 @@ while (!jobsys_fence_done(&p->fences, h)) {
 release the slot ourselves so
     // it doesnt leak (jobsys_fence_wait would have, but we short-circuited it).
     jobsys_fence_release(&p->fences, h);
+}
+
+jobsys_stats jobsys_get_stats(const jobsys_pool *p) {
+    // copy out the atomics into a plain snapshot. racy by nature, debug only.
+    jobsys_stats s;
+    s.submitted  = jat_load_rlx(&p->stats.submitted);
+    s.executed   = jat_load_rlx(&p->stats.executed);
+    s.stolen     = jat_load_rlx(&p->stats.stolen);
+    s.overflowed = jat_load_rlx(&p->stats.overflowed);
+    s.main_ran   = jat_load_rlx(&p->stats.main_ran);
+    return s;
+}
