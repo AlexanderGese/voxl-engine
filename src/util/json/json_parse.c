@@ -5,8 +5,12 @@
 #include "json_value.h"
 #include "json_array.h"
 #include "json_object.h"
+
 #include <stdlib.h>
 #include <string.h>
+
+// parser state: the lexer plus one token of lookahead and the depth guard.
+// keeping a single lookahead is enough for json's LL(1) grammar.
 typedef struct {
     json_lexer lx;
     json_token cur;     // current (already lexed) token
@@ -14,7 +18,11 @@ typedef struct {
     json_err   err;
     json_loc  *loc;     // where to stash a failure, may be NULL
 } parser;
+
 static json_value parse_value(parser *p);
+
+// record a failure at the current token's position, once. the first error
+// wins so the reported location is the real cause, not a cascade.
 static void fail(parser *p, json_err e) {
     if (p->err != JSON_OK) return;
     p->err = e;
@@ -29,8 +37,8 @@ static void fail(parser *p, json_err e) {
 // pull the next token into p->cur, surfacing a lexer error as our error.
 static void bump(parser *p) {
     if (p->err != JSON_OK) return;
-p->cur = json_lex_next(&p->lx);
-if (p->cur.kind == JSON_TOK_ERROR) fail(p, p->lx.err);
+    p->cur = json_lex_next(&p->lx);
+    if (p->cur.kind == JSON_TOK_ERROR) fail(p, p->lx.err);
 }
 
 // decode a string token's body into a freshly-heaped value. on a bad escape we
@@ -57,12 +65,10 @@ static json_value take_string(parser *p, const json_token *t) {
 
 static json_value parse_array(parser *p) {
     json_value arr = json_array();
-bump(p);
-if (p->cur.kind == JSON_TOK_RBRACKET) { bump(p); return arr; }
+    bump(p);  // consume '['
+    if (p->cur.kind == JSON_TOK_RBRACKET) { bump(p); return arr; }
 
-    for (;
-;
-) {
+    for (;;) {
         json_value el = parse_value(p);
         if (p->err != JSON_OK) { json_free(&el); json_free(&arr); return json_null(); }
         json_array_push(&arr, el);
@@ -124,10 +130,10 @@ static json_value parse_object(parser *p) {
 
 static json_value parse_value(parser *p) {
     if (p->err != JSON_OK) return json_null();
-if (++p->depth > JSON_MAX_DEPTH) { fail(p, JSON_ERR_DEPTH); p->depth--; return json_null(); }
+    if (++p->depth > JSON_MAX_DEPTH) { fail(p, JSON_ERR_DEPTH); p->depth--; return json_null(); }
 
     json_value v = json_null();
-switch (p->cur.kind) {
+    switch (p->cur.kind) {
         case JSON_TOK_LBRACE:   v = parse_object(p); break;
         case JSON_TOK_LBRACKET: v = parse_array(p);  break;
         case JSON_TOK_STRING: {
@@ -150,7 +156,7 @@ switch (p->cur.kind) {
         default:             fail(p, JSON_ERR_UNEXPECTED); break;
     }
     p->depth--;
-return v;
+    return v;
 }
 
 json_err json_parse(const char *src, size_t len, json_value *out, json_loc *loc) {
