@@ -1,6 +1,8 @@
 #include "serialize_crc.h"
+
 static uint32_t crc_table[256];
 static int      crc_ready = 0;
+
 static void crc_build(void) {
     for (uint32_t n = 0; n < 256; n++) {
         uint32_t c = n;
@@ -13,7 +15,7 @@ static void crc_build(void) {
 
 uint32_t serialize_crc32_begin(void) {
     if (!crc_ready) crc_build();
-return 0xFFFFFFFFu;
+    return 0xFFFFFFFFu;
 }
 
 uint32_t serialize_crc32_update(uint32_t crc, const void *data, size_t len) {
