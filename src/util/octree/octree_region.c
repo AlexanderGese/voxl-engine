@@ -1,5 +1,7 @@
 #include "octree_region.h"
+
 #include "../../config.h"
+
 aabb octree_chunk_bounds(int cx, int cz) {
     vec3 mn = {
         (float)(cx * CHUNK_SIZE_X),
@@ -16,10 +18,8 @@ aabb octree_chunk_bounds(int cx, int cz) {
 
 aabb octree_block_bounds(int bx, int by, int bz) {
     vec3 mn = {(float)bx, (float)by, (float)bz};
-vec3 mx = {(float)(bx + 1), (float)(by + 1), (float)(bz + 1)}
-;
-return (aabb){mn, mx}
-;
+    vec3 mx = {(float)(bx + 1), (float)(by + 1), (float)(bz + 1)};
+    return (aabb){mn, mx};
 }
 
 void octree_world_to_chunk(int bx, int bz, int *cx, int *cz) {
@@ -38,22 +38,21 @@ void octree_init_region(octree *t, int center_cx, int center_cz, int radius) {
     // out to the full chunk square so block-aligned items never sit exactly on
     // the boundary (which the slab test treats as outside).
     int lo_cx = center_cx - radius;
-int lo_cz = center_cz - radius;
-int hi_cx = center_cx + radius + 1;
-int hi_cz = center_cz + radius + 1;
-vec3 mn = {
+    int lo_cz = center_cz - radius;
+    int hi_cx = center_cx + radius + 1;   // exclusive top chunk edge
+    int hi_cz = center_cz + radius + 1;
+
+    vec3 mn = {
         (float)(lo_cx * CHUNK_SIZE_X),
         0.0f,
         (float)(lo_cz * CHUNK_SIZE_Z),
-    }
-;
-vec3 mx = {
+    };
+    vec3 mx = {
         (float)(hi_cx * CHUNK_SIZE_X),
         (float)CHUNK_SIZE_Y,
         (float)(hi_cz * CHUNK_SIZE_Z),
-    }
-;
-octree_init(t, (aabb){mn, mx});
+    };
+    octree_init(t, (aabb){mn, mx});
 }
 
 int octree_insert_box(octree *t, uint32_t id, uint32_t tag, vec3 center, vec3 half) {
