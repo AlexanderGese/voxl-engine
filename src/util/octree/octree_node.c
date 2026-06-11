@@ -1,6 +1,8 @@
 #include "octree_node.h"
+
 #include <stdlib.h>
 #include <string.h>
+
 void octree_pool_init(octree_pool *p, int32_t initial_cap) {
     if (initial_cap < 16) initial_cap = 16;
     p->nodes = calloc((size_t)initial_cap, sizeof(octree_node));
@@ -14,10 +16,10 @@ void octree_pool_free(octree_pool *p) {
     // items darrays live inside nodes, the tree frees those before recycling.
     // here we only own the node block itself.
     free(p->nodes);
-p->nodes = NULL;
-p->cap = p->len = 0;
-p->freelist = -1;
-p->free_count = 0;
+    p->nodes = NULL;
+    p->cap = p->len = 0;
+    p->freelist = -1;
+    p->free_count = 0;
 }
 
 static int32_t pool_grow(octree_pool *p) {
@@ -32,26 +34,24 @@ static int32_t pool_grow(octree_pool *p) {
 
 int32_t octree_pool_acquire(octree_pool *p, aabb bounds, uint8_t depth) {
     int32_t idx;
-if (p->freelist >= 0) {
+    if (p->freelist >= 0) {
         // reuse. we stashed the next-free index in child[0] while it was dead.
         idx = p->freelist;
         p->freelist = p->nodes[idx].child[0];
         p->free_count--;
     } else {
         if (p->len >= p->cap && pool_grow(p) != 0) return -1;
-idx = p->len++;
-}
+        idx = p->len++;
+    }
 
     octree_node *n = &p->nodes[idx];
-n->bounds = bounds;
-n->items = NULL;
-n->count = 0;
-n->depth = depth;
-n->leaf = 1;
-for (int i = 0;
-i < 8;
-i++) n->child[i] = -1;
-return idx;
+    n->bounds = bounds;
+    n->items = NULL;
+    n->count = 0;
+    n->depth = depth;
+    n->leaf = 1;
+    for (int i = 0; i < 8; i++) n->child[i] = -1;
+    return idx;
 }
 
 void octree_pool_recycle(octree_pool *p, int32_t idx) {
@@ -67,8 +67,7 @@ void octree_pool_recycle(octree_pool *p, int32_t idx) {
     p->free_count++;
 }
 
-static aabb box_make(vec3 mn, vec3 mx) { return (aabb){mn, mx};
-}
+static aabb box_make(vec3 mn, vec3 mx) { return (aabb){mn, mx}; }
 
 aabb octree_child_bounds(aabb parent, int oct) {
     vec3 c = {
@@ -86,10 +85,31 @@ aabb octree_child_bounds(aabb parent, int oct) {
 
 int octree_point_octant(aabb parent, vec3 p) {
     float cx = (parent.min.x + parent.max.x) * 0.5f;
-float cy = (parent.min.y + parent.max.y) * 0.5f;
-float cz = (parent.min.z + parent.max.z) * 0.5f;
-int oct = 0;
-if (p.x >= cx) oct |= 1;
-if (p.y >= cy) oct |= 2;
-if (p.z >= cz) oct |= 4;
-return oct;
+    float cy = (parent.min.y + parent.max.y) * 0.5f;
+    float cz = (parent.min.z + parent.max.z) * 0.5f;
+    int oct = 0;
+    if (p.x >= cx) oct |= 1;
+    if (p.y >= cy) oct |= 2;
+    if (p.z >= cz) oct |= 4;
+    return oct;
+}
+
+int octree_box_octant(aabb parent, aabb box) {
+    float cx = (parent.min.x + parent.max.x) * 0.5f;
+    float cy = (parent.min.y + parent.max.y) * 0.5f;
+    float cz = (parent.min.z + parent.max.z) * 0.5f;
+
+    // if the box crosses a center plane it cant live in one child. bail.
+    int ox, oy, oz;
+    if      (box.max.x <  cx) ox = 0;
+    else if (box.min.x >= cx) ox = 1;
+    else return -1;
+    if      (box.max.y <  cy) oy = 0;
+    else if (box.min.y >= cy) oy = 1;
+    else return -1;
+    if      (box.max.z <  cz) oz = 0;
+    else if (box.min.z >= cz) oz = 1;
+    else return -1;
+
+    return ox | (oy << 1) | (oz << 2);
+}
