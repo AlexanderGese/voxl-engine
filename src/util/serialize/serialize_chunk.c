@@ -182,8 +182,33 @@ int32_t cz = serialize_get_i32(r);
 uint8_t enc = serialize_get_u8(r);
 uint8_t has_light = serialize_get_u8(r);
 if (r->err != SERIALIZE_OK) return -1;
+if ((c->cx || c->cz) && (cx != c->cx || cz != c->cz)) {
+        LOGW("serialize: chunk coord mismatch (%d,%d) want (%d,%d)",
+             cx, cz, c->cx, c->cz);
+        return -1;
+    }
+    c->cx = cx;
 c->cz = cz;
 int rc;
+switch (enc) {
+        case SERIALIZE_BLK_RLE: rc = dec_rle(r, c->blocks); break;
+        case SERIALIZE_BLK_PAL: rc = dec_pal(r, c->blocks); break;
+        case SERIALIZE_BLK_RAW:
+            rc = serialize_get_bytes(r, c->blocks, CHUNK_VOLUME);
+            break;
+        default:
+            LOGW("serialize: unknown block enc %u", enc);
+            return -1;
+    }
+    if (rc != 0) return -1;
+if (has_light) {
+        if (dec_light(r, c->light) != 0) {
+            // light is cheap to regenerate, dont fail the load over it.
+            LOGW("serialize: bad light, will relight");
+            memset(c->light, 0, sizeof c->light);
+        }
+    } else {
+        memset(c->light, 0, sizeof c->light);
 }
     c->generated = 1;
 c->dirty = 1;
