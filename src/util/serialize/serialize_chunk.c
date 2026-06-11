@@ -3,6 +3,31 @@
 #include "../log.h"
 #include <stdlib.h>
 #include <string.h>
+static void enc_rle(serialize_writer *w, const block_id *blocks) {
+    // count runs first so we can prefix the count (avoids a patch dance).
+    size_t runs = 0;
+    for (size_t i = 0; i < CHUNK_VOLUME; ) {
+        block_id id = blocks[i];
+        size_t len = 1;
+        while (i + len < CHUNK_VOLUME && blocks[i + len] == id) len++;
+        runs++;
+        i += len;
+    }
+    serialize_put_varint(w, runs);
+    for (size_t i = 0; i < CHUNK_VOLUME; ) {
+        block_id id = blocks[i];
+        size_t len = 1;
+        while (i + len < CHUNK_VOLUME && blocks[i + len] == id) len++;
+        serialize_put_u8(w, id);
+        serialize_put_varint(w, len);
+        i += len;
+    }
+}
+
+// palette: [u8 pal_n][pal ids...][u8 bits] then lsb-first bitpacked indices.
+// returns -1 if the chunk is too varied to be worth a palette.
+static int enc_pal(serialize_writer *w, const block_id *blocks) {
+    uint8_t pal[256];
 int     pal_n = 0;
 int     map[256];
 for (int i = 0;
