@@ -1,6 +1,7 @@
 #include "serialize_tag.h"
 #include "serialize_crc.h"
 #include "../log.h"
+// hard cap on a single section body. nothing legit in this engine writes a
 #define SERIALIZE_TAG_MAX_BODY (64u * 1024u * 1024u)
 serialize_tag_scope serialize_tag_begin(serialize_writer *w, uint32_t tag,
                                         uint8_t version, uint8_t flags) {
@@ -76,4 +77,12 @@ int serialize_tag_skip_body(serialize_reader *r, const serialize_tag_hdr *h) {
 
 int serialize_tag_find(serialize_reader *r, uint32_t tag, serialize_tag_hdr *out) {
     serialize_tag_hdr h;
+while (serialize_tag_next(r, &h) != 0) {
+        if (h.tag == tag) {
+            *out = h;
+            return 0;
+        }
+        if (serialize_tag_skip_body(r, &h) != 0) return -1;
+    }
+    return -1;
 }
