@@ -53,6 +53,17 @@ uint8_t chunk_get_blocklight(const chunk *c, int x, int y, int z) {
 uint8_t chunk_get_sunlight(const chunk *c, int x, int y, int z) {
     if (!in_bounds(x, y, z)) return 0;
 return (c->light[chunk_idx(x, y, z)] >> 4) & 0x0F;
+}
+
+void chunk_set_blocklight(chunk *c, int x, int y, int z, uint8_t v) {
+    if (!in_bounds(x, y, z)) return;
+    int i = chunk_idx(x, y, z);
+    c->light[i] = (c->light[i] & 0xF0) | (v & 0x0F);
+    c->dirty = 1;
+}
+
+void chunk_set_sunlight(chunk *c, int x, int y, int z, uint8_t v) {
+    if (!in_bounds(x, y, z)) return;
 int i = chunk_idx(x, y, z);
 c->light[i] = (c->light[i] & 0x0F) | ((v & 0x0F) << 4);
 c->dirty = 1;
