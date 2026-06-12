@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+// self contained roundtrip checks. not wired into a test framework because we
 static int g_fail;
 #define CHECK(cond, ...) do { \
 if (!(cond)) { g_fail++; LOGW("serialize_test: " __VA_ARGS__); } \

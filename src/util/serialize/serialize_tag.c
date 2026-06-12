@@ -1,8 +1,12 @@
 #include "serialize_tag.h"
 #include "serialize_crc.h"
 #include "../log.h"
+
 // hard cap on a single section body. nothing legit in this engine writes a
+// section bigger than a region file, and an absurd length is the usual sign
+// of a corrupt header. better to bail than to chew on garbage.
 #define SERIALIZE_TAG_MAX_BODY (64u * 1024u * 1024u)
+
 serialize_tag_scope serialize_tag_begin(serialize_writer *w, uint32_t tag,
                                         uint8_t version, uint8_t flags) {
     serialize_tag_scope s;
@@ -20,9 +24,11 @@ serialize_tag_scope serialize_tag_begin(serialize_writer *w, uint32_t tag,
 
 void serialize_tag_end(serialize_writer *w, serialize_tag_scope *scope) {
     if (w->err != SERIALIZE_OK) return;
-size_t body_len = w->len - scope->body_at;
-serialize_writer_patch_u32(w, scope->len_at, (uint32_t)body_len);
-if (scope->flags & SERIALIZE_TAG_F_CRC) {
+
+    size_t body_len = w->len - scope->body_at;
+    serialize_writer_patch_u32(w, scope->len_at, (uint32_t)body_len);
+
+    if (scope->flags & SERIALIZE_TAG_F_CRC) {
         // crc covers the whole section header + body, i.e. from tag onward.
         size_t hdr_at = scope->len_at - 6;   // tag(4)+ver(1)+flags(1)
         uint32_t crc = serialize_crc32(w->data + hdr_at, w->len - hdr_at);
@@ -31,20 +37,22 @@ if (scope->flags & SERIALIZE_TAG_F_CRC) {
 }
 
 int serialize_tag_next(serialize_reader *r, serialize_tag_hdr *out) {
-    if (r->left == 0) return -1;
-out->tag      = serialize_get_u32(r);
-out->version  = serialize_get_u8(r);
-out->flags    = serialize_get_u8(r);
-uint32_t blen = serialize_get_u32(r);
-if (r->err != SERIALIZE_OK) return -1;
-if (blen > SERIALIZE_TAG_MAX_BODY) {
+    if (r->left == 0) return -1;            // clean eof, no more sections
+
+    out->tag      = serialize_get_u32(r);
+    out->version  = serialize_get_u8(r);
+    out->flags    = serialize_get_u8(r);
+    uint32_t blen = serialize_get_u32(r);
+    if (r->err != SERIALIZE_OK) return -1;
+
+    if (blen > SERIALIZE_TAG_MAX_BODY) {
         LOGW("serialize: tag body %u too big, treating as corrupt", blen);
         r->err = SERIALIZE_ERR_CORRUPT;
         return -1;
     }
     out->body_len = blen;
-out->body_at  = serialize_reader_tell(r);
-return 0;
+    out->body_at  = serialize_reader_tell(r);
+    return 0;
 }
 
 int serialize_tag_skip_body(serialize_reader *r, const serialize_tag_hdr *h) {
@@ -77,7 +85,7 @@ int serialize_tag_skip_body(serialize_reader *r, const serialize_tag_hdr *h) {
 
 int serialize_tag_find(serialize_reader *r, uint32_t tag, serialize_tag_hdr *out) {
     serialize_tag_hdr h;
-while (serialize_tag_next(r, &h) != 0) {
+    while (serialize_tag_next(r, &h) == 0) {
         if (h.tag == tag) {
             *out = h;
             return 0;

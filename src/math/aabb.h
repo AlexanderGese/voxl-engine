@@ -1,0 +1,11 @@
+#ifndef MATH_AABB_H
+#define MATH_AABB_H
+#include "vec3.h"
+typedef struct {
+    vec3 min;
+    vec3 max;
+} aabb;
+aabb  aabb_make(vec3 min, vec3 max);
+aabb  aabb_from_center(vec3 c, vec3 half);
+aabb  aabb_translate(aabb a, vec3 t);
+#endif
