@@ -1,7 +1,11 @@
 #include "noise.h"
+
 #include <math.h>
 #include <stdlib.h>
+
+// permutation table. shuffled from seed.
 static int perm[512];
+
 static float fade(float t) {
     // 6t^5 - 15t^4 + 10t^3
     return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
@@ -20,9 +24,9 @@ static float grad2(int hash, float x, float y) {
 
 static float grad3(int hash, float x, float y, float z) {
     int h = hash & 15;
-float u = h < 8 ? x : y;
-float v = h < 4 ? y : (h == 12 || h == 14 ? x : z);
-return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
+    float u = h < 8 ? x : y;
+    float v = h < 4 ? y : (h == 12 || h == 14 ? x : z);
+    return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
 }
 
 void noise_seed(unsigned int seed) {
@@ -43,18 +47,22 @@ void noise_seed(unsigned int seed) {
 
 float noise2d(float x, float y) {
     int X = (int)floorf(x) & 255;
-int Y = (int)floorf(y) & 255;
-x -= floorf(x);
-y -= floorf(y);
-float u = fade(x);
-float v = fade(y);
-int A  = perm[X] + Y;
-int AA = perm[A];
-int AB = perm[A + 1];
-int B  = perm[X + 1] + Y;
-int BA = perm[B];
-int BB = perm[B + 1];
-float r = lerp(
+    int Y = (int)floorf(y) & 255;
+
+    x -= floorf(x);
+    y -= floorf(y);
+
+    float u = fade(x);
+    float v = fade(y);
+
+    int A  = perm[X] + Y;
+    int AA = perm[A];
+    int AB = perm[A + 1];
+    int B  = perm[X + 1] + Y;
+    int BA = perm[B];
+    int BB = perm[B + 1];
+
+    float r = lerp(
         lerp(grad2(perm[AA],     x,        y),
              grad2(perm[BA],     x - 1.0f, y),
              u),
@@ -62,10 +70,56 @@ float r = lerp(
              grad2(perm[BB],     x - 1.0f, y - 1.0f),
              u),
         v);
-return r;
-float amp = 1.0f;
-float freq = 1.0f;
-float norm = 0.0f;
-for (int i = 0;
-i < octaves - 1;
+    return r;
+}
+
+float noise3d(float x, float y, float z) {
+    int X = (int)floorf(x) & 255;
+    int Y = (int)floorf(y) & 255;
+    int Z = (int)floorf(z) & 255;
+
+    x -= floorf(x);
+    y -= floorf(y);
+    z -= floorf(z);
+
+    float u = fade(x);
+    float v = fade(y);
+    float w = fade(z);
+
+    int A  = perm[X] + Y;
+    int AA = perm[A] + Z;
+    int AB = perm[A + 1] + Z;
+    int B  = perm[X + 1] + Y;
+    int BA = perm[B] + Z;
+    int BB = perm[B + 1] + Z;
+
+    float r = lerp(
+        lerp(
+            lerp(grad3(perm[AA    ], x,        y,        z       ),
+                 grad3(perm[BA    ], x - 1.0f, y,        z       ), u),
+            lerp(grad3(perm[AB    ], x,        y - 1.0f, z       ),
+                 grad3(perm[BB    ], x - 1.0f, y - 1.0f, z       ), u),
+            v),
+        lerp(
+            lerp(grad3(perm[AA + 1], x,        y,        z - 1.0f),
+                 grad3(perm[BA + 1], x - 1.0f, y,        z - 1.0f), u),
+            lerp(grad3(perm[AB + 1], x,        y - 1.0f, z - 1.0f),
+                 grad3(perm[BB + 1], x - 1.0f, y - 1.0f, z - 1.0f), u),
+            v),
+        w);
+    return r;
+}
+
+float noise_fbm2d(float x, float y, int octaves, float lacunarity, float gain) {
+    float sum = 0.0f;
+    float amp = 1.0f;
+    float freq = 1.0f;
+    float norm = 0.0f;
+    for (int i = 0; i < octaves; i++) {
+        sum  += amp * noise2d(x * freq, y * freq);
+        norm += amp;
+        amp  *= gain;
+        freq *= lacunarity;
+    }
+    return sum / norm;
 }
