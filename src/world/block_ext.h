@@ -1,6 +1,10 @@
 #ifndef WORLD_BLOCK_EXT_H
 #define WORLD_BLOCK_EXT_H
+
 #include "block.h"
+
+// extended block types. added these after running out of the original 16.
+
 enum {
     BLOCK_IRON_ORE = BLOCK_COUNT,
     BLOCK_COAL_ORE,
@@ -36,7 +40,8 @@ enum {
     BLOCK_PUMPKIN,
     BLOCK_MELON,
     BLOCK_EXT_COUNT
-}
+};
+
 typedef struct {
     const char *name;
     int    solid;
@@ -52,4 +57,13 @@ typedef struct {
     int    drop_count;
     int    stack_max;
 } block_ext_info;
+
+void block_ext_init(void);
+const block_ext_info *block_ext_get(int id);
+int  block_ext_is_solid(int id);
+int  block_ext_is_opaque(int id);
+int  block_ext_is_plant(int id);
+float block_ext_break_time(int id);
+const char *block_ext_name(int id);
+
 #endif
