@@ -1,21 +1,24 @@
 #include "chunk.h"
 #include "../util/log.h"
 #include "../render/gl.h"
+
 #include <stdlib.h>
 #include <string.h>
+
 int chunk_idx(int x, int y, int z) {
     return x + z * CHUNK_SIZE_X + y * CHUNK_SIZE_X * CHUNK_SIZE_Z;
 }
 
 chunk *chunk_create(int cx, int cz) {
     chunk *c = calloc(1, sizeof(chunk));
-if (!c) return NULL;
-c->cx = cx;
-c->cz = cz;
-c->dirty = 1;
-c->generated = 0;
-c->saved = 0;
-return c;
+    if (!c) return NULL;
+    c->cx = cx;
+    c->cz = cz;
+    c->dirty = 1;
+    c->generated = 0;
+    c->saved = 0;
+    // blocks and light are zeroed by calloc, which means all air + darkness
+    return c;
 }
 
 void chunk_destroy(chunk *c) {
@@ -38,11 +41,11 @@ block_id chunk_get_block(const chunk *c, int x, int y, int z) {
 
 void chunk_set_block(chunk *c, int x, int y, int z, block_id id) {
     if (!in_bounds(x, y, z)) return;
-int i = chunk_idx(x, y, z);
-if (c->blocks[i] == id) return;
-c->blocks[i] = id;
-c->dirty = 1;
-c->saved = 0;
+    int i = chunk_idx(x, y, z);
+    if (c->blocks[i] == id) return;
+    c->blocks[i] = id;
+    c->dirty = 1;
+    c->saved = 0;
 }
 
 uint8_t chunk_get_blocklight(const chunk *c, int x, int y, int z) {
@@ -52,7 +55,7 @@ uint8_t chunk_get_blocklight(const chunk *c, int x, int y, int z) {
 
 uint8_t chunk_get_sunlight(const chunk *c, int x, int y, int z) {
     if (!in_bounds(x, y, z)) return 0;
-return (c->light[chunk_idx(x, y, z)] >> 4) & 0x0F;
+    return (c->light[chunk_idx(x, y, z)] >> 4) & 0x0F;
 }
 
 void chunk_set_blocklight(chunk *c, int x, int y, int z, uint8_t v) {
@@ -64,7 +67,7 @@ void chunk_set_blocklight(chunk *c, int x, int y, int z, uint8_t v) {
 
 void chunk_set_sunlight(chunk *c, int x, int y, int z, uint8_t v) {
     if (!in_bounds(x, y, z)) return;
-int i = chunk_idx(x, y, z);
-c->light[i] = (c->light[i] & 0x0F) | ((v & 0x0F) << 4);
-c->dirty = 1;
+    int i = chunk_idx(x, y, z);
+    c->light[i] = (c->light[i] & 0x0F) | ((v & 0x0F) << 4);
+    c->dirty = 1;
 }
