@@ -123,3 +123,24 @@ dz++) {
     }
     if (wsum <= 0.0f) return sea_level;
 return (int)lroundf(acc / wsum);
+}
+
+float biome_blend_edge(int wx, int wz, uint32_t seed) {
+    biome_climate c0;
+    biome_climate_sample(wx, wz, seed, &c0);
+    biome_kind home = biome_lookup_pick(&c0);
+
+    int different = 0, total = 0;
+    const int r = 4;
+    for (int dz = -r; dz <= r; dz += 2) {
+        for (int dx = -r; dx <= r; dx += 2) {
+            if (dx == 0 && dz == 0) continue;
+            biome_climate c;
+            biome_climate_sample(wx + dx, wz + dz, seed, &c);
+            if (biome_lookup_pick(&c) != home) different++;
+            total++;
+        }
+    }
+    if (total == 0) return 0.0f;
+    return (float)different / (float)total;
+}
