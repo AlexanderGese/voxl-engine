@@ -2,6 +2,7 @@
 #include "block.h"
 #include "../math/rng.h"
 #include "../config.h"
+
 static void place_vein(chunk *c, rng *r, int cx, int cy, int cz, int size, block_id id) {
     for (int i = 0; i < size; i++) {
         int ox = cx + rng_range(r, -1, 1);
@@ -18,8 +19,14 @@ static void place_vein(chunk *c, rng *r, int cx, int cy, int cz, int size, block
 
 void ore_sprinkle(chunk *c, unsigned seed) {
     rng r;
-rng_init(&r, seed ^ ((uint64_t)c->cx * 73856093ull) ^ ((uint64_t)c->cz * 19349663ull));
-int tries = 20;
-for (int i = 0;
-i < tries;
+    rng_init(&r, seed ^ ((uint64_t)c->cx * 73856093ull) ^ ((uint64_t)c->cz * 19349663ull));
+
+    int tries = 20;
+    for (int i = 0; i < tries; i++) {
+        int x = rng_range(&r, 1, CHUNK_SIZE_X - 2);
+        int y = rng_range(&r, 2, 40);
+        int z = rng_range(&r, 1, CHUNK_SIZE_Z - 2);
+        int size = rng_range(&r, 3, 7);
+        place_vein(c, &r, x, y, z, size, BLOCK_COBBLE);
+    }
 }
