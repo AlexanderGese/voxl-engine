@@ -1,7 +1,14 @@
 #include "biome_column.h"
 #include "biome_blend.h"
 #include "biome_lookup.h"
+
 #include <string.h>
+
+// the order here matters. we sample raw climate first, do a provisional pick
+// to get a rough height, altitude-correct against that height, then re-pick.
+// one feedback pass is enough to make mountaintops flip cold without an
+// expensive fixed-point loop.
+
 void biome_column_build(biome_column *col, int wx, int wz,
                         int sea_level, uint32_t seed, int radius) {
     if (!col) return;
