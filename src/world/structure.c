@@ -3,6 +3,7 @@
 #include "worldgen.h"
 #include "../math/rng.h"
 #include "../config.h"
+
 static void place_hut(chunk *c, int lx, int ly, int lz) {
     // 5x5 footprint, 3 high. planks walls, door slot, roof.
     if (lx < 1 || lx + 5 >= CHUNK_SIZE_X) return;
@@ -32,13 +33,14 @@ static void place_hut(chunk *c, int lx, int ly, int lz) {
 
 void structure_maybe_place(chunk *c, unsigned seed) {
     rng r;
-rng_init(&r, seed ^ ((uint64_t)c->cx * 49979687u) ^ ((uint64_t)c->cz * 86028121u));
-if (rng_float01(&r) > 0.05f) return;
-int lx = rng_range(&r, 2, CHUNK_SIZE_X - 6);
-int lz = rng_range(&r, 2, CHUNK_SIZE_Z - 6);
-int wx = c->cx * CHUNK_SIZE_X + lx + 2;
-int wz = c->cz * CHUNK_SIZE_Z + lz + 2;
-int h  = worldgen_height_at(wx, wz, seed);
-if (h < WORLD_SEA_LEVEL + 2) return;
-place_hut(c, lx, h + 1, lz);
+    rng_init(&r, seed ^ ((uint64_t)c->cx * 49979687u) ^ ((uint64_t)c->cz * 86028121u));
+    if (rng_float01(&r) > 0.05f) return;   // ~5% of chunks get one
+
+    int lx = rng_range(&r, 2, CHUNK_SIZE_X - 6);
+    int lz = rng_range(&r, 2, CHUNK_SIZE_Z - 6);
+    int wx = c->cx * CHUNK_SIZE_X + lx + 2;
+    int wz = c->cz * CHUNK_SIZE_Z + lz + 2;
+    int h  = worldgen_height_at(wx, wz, seed);
+    if (h < WORLD_SEA_LEVEL + 2) return;
+    place_hut(c, lx, h + 1, lz);
 }
