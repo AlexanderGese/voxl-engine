@@ -1,5 +1,7 @@
 #include "cavegen_carve.h"
+
 #include "../../config.h"
+
 int cavegen_carve_is_diggable(block_id id) {
     // stone family + soft cover. leave bedrock, water, and anything we dont
     // recognise alone — better to leave a wall than punch through a structure.
@@ -19,9 +21,9 @@ int cavegen_carve_is_diggable(block_id id) {
 cavegen_carve_stats cavegen_carve_apply(chunk *c, const cavegen_grid *g,
                                         const cavegen_params *p) {
     cavegen_carve_stats st = {0};
-for (int lz = 0;
-lz < CHUNK_SIZE_Z;
-lz++) {
+
+    // walk only the chunk footprint. cell (PAD+lx, y, PAD+lz) <-> chunk (lx,y,lz).
+    for (int lz = 0; lz < CHUNK_SIZE_Z; lz++) {
         for (int lx = 0; lx < CHUNK_SIZE_X; lx++) {
             int cellx = lx + CAVEGEN_PAD;
             int cellz = lz + CAVEGEN_PAD;
@@ -47,6 +49,6 @@ lz++) {
     }
 
     if (st.air_set || st.water_set)
-        c->dirty = 1;
-return st;
+        c->dirty = 1;   // it changed, mesher needs to redo it
+    return st;
 }
