@@ -1,6 +1,16 @@
 #include "biome_surface.h"
 #include "biome_table.h"
 #include "biome_noise.h"
+
+// material stack from the top down:
+// y > height           -> water (if below sea) or snow cap or air
+// y == height          -> surface block (swapped if submerged / snowy)
+// height-1 .. -depth    -> subsurface band
+// below that            -> filler (stone) down to y==0 bedrock
+//
+// the little noise wobble on the subsurface depth keeps dirt bands from being
+// suspiciously flat where two biomes meet.
+
 block_id biome_surface_block(const biome_column *col, int y) {
     const biome_def *d = biome_table_get(col->biome);
     int top = col->height;
@@ -44,4 +54,14 @@ block_id biome_surface_block(const biome_column *col, int y) {
 
 block_id biome_surface_top(const biome_column *col) {
     if (col->height < col->sea_level) return BLOCK_WATER;
-return biome_surface_block(col, col->height);
+    return biome_surface_block(col, col->height);
+}
+
+int biome_surface_fill(const biome_column *col, int y0, int y1, block_id *out) {
+    if (!out || y1 <= y0) return 0;
+    int n = 0;
+    for (int y = y0; y < y1; y++) {
+        out[n++] = biome_surface_block(col, y);
+    }
+    return n;
+}
