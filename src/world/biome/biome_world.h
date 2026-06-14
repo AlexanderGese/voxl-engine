@@ -1,5 +1,6 @@
 #ifndef WORLD_BIOME_WORLD_H
 #define WORLD_BIOME_WORLD_H
+
 // umbrella header for the world/biome subsystem. include this from worldgen
 // and you get the whole pipeline: climate sampling, biome lookup, neighborhood
 // blending, surface material rules, climate tints, decoration, and the column
@@ -11,6 +12,8 @@
 // 2. for each column, biome_cache_get -> resolved biome_column.
 // 3. fill the vertical strip with biome_surface_block / _fill.
 // 4. roll deco with biome_deco_emit, drain the place buffer into the chunk.
+// 5. push grass/water tints from biome_color_* into the mesh vertex colors.
+
 #include "biome_def.h"
 #include "biome_climate.h"
 #include "biome_noise.h"
@@ -23,4 +26,5 @@
 #include "biome_color.h"
 #include "biome_deco.h"
 #include "biome_cache.h"
+
 #endif
